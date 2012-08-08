@@ -22,118 +22,40 @@
 #include "itkImageFileWriter.h"
 #include "itkImageRegionIteratorWithIndex.h"
 #include "itkLevelSetDomainMapImageFilter.h"
-#include "itkLevelSetContainerBase.h"
-#include "itkLevelSetEquationChanAndVeseTerm.h"
 #include "itkLevelSetEquationCurvatureTerm.h"
-#include "itkLevelSetEquationTermContainerBase.h"
-#include "itkLevelSetEquationContainerBase.h"
+#include "itkLevelSetEquationContainer.h"
 #include "itkAtanRegularizedHeavisideStepFunction.h"
 #include "itkLevelSetEvolution.h"
+#include "itkLevelSetEquationTermContainer.h"
 #include "itkWhitakerSparseLevelSetImage.h"
-#include "itkLevelSetDenseImageBase.h"
 #include "itkLevelSetEvolutionNumberOfIterationsStoppingCriterion.h"
 #include "itkBinaryImageToLevelSetImageAdaptor.h"
 #include "itkGradientMagnitudeRecursiveGaussianImageFilter.h"
-#include "itkLevelSetEquationCurvatureTerm.h"
-#include "itkLevelSetEquationAdvectionTerm.h"
-#include "itkLevelSetContainer.h"
-#include "itkLevelSetEquationLaplacianTerm.h"
 #include "itkAtanRegularizedHeavisideStepFunction.h"
 #include "itkBinaryImageToLevelSetImageAdaptor.h"
 #include "itkLevelSetEvolutionNumberOfIterationsStoppingCriterion.h"
-#include "boost/program_options.hpp"
-#include "boost/filesystem/operations.hpp"
-#include "itkScalarChanAndVeseSparseLevelSetImageFilter.h"
 #include "itkLevelSetEquationChanAndVeseInternalTerm.h"
+#include "itkLevelSetContainer.h"
+#include "itkLevelSetEquationChanAndVeseExternalTerm.h"
 #include <time.h>
 #include <math.h>
-using namespace std;
-
-namespace po = boost::program_options;
-namespace bfs = boost::filesystem;
-
+#include "itkLevelSetEquationChanAndVeseGlobalTerm.h"
 
 
 int main( int argc, char* argv[] )
 {
-  std::vector<std::string> parameters;
-  std::vector<std::string> help;
-  std::vector<float>  parametersF;
-  help.push_back(" Piecewise smooth regional levelset: Regional-scalable-fitting");
-  help.push_back(" Algorithm by Chunming Li 2008 IEEE Transactions on Image Processing");
-  help.push_back(" Author: Hui Tang");
-
-  po::options_description desc1("Images");
-  desc1.add_options()
-    ("help,h", "produce help message")
-    ("initialImage,i", po::value<std::string>(), "inital binary image, .mhd file ")
-    ("originalImage,o", po::value<std::string>(), "original image,.mhd file")
-    ("outputImage,O",po::value<std::string>(),"output signed distance map image, .mhd file");
-
- po::options_description desc2("Parameters");
-   desc2.add_options()
-     ("parameters,P",po::value<std::vector<std::string> >(), "parameters");
-
-  po::positional_options_description pd;
-  pd.add("parameters", -1);
-
-  po::options_description cmddescAll("Parse");
-  cmddescAll.add(desc1).add(desc2);
-
-  po::variables_map vm;
-  po::parsed_options parsed=po::command_line_parser(argc, argv).options(cmddescAll).allow_unregistered().positional(pd).run();
-  //po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
-
-  try
-    {
-    po::store(parsed, vm);
-    po::notify(vm);
-    }
-  catch (std::exception& e)
-    {
-    cout << "Exception while parsing parameters: " << endl;
-    cout << e.what() << endl;
-    return EXIT_FAILURE;
-    }
-
-
-
-
+ 
   // Print help message
-  if (vm.count("help") || vm.size()==0)
+  if (argc < 8)
     {
     std::cout << "========================================================================="<< std::endl;
-	std::cout << "Perform piecewise constant Regional levelset segmentation" << std::endl ;
+	std::cout << "Perform piecewise constant regional levelset segmentation" << std::endl ;
     std::cout << "Algorithm by Chan and Vese"<<std::endl;
     std::cout << "Author: Hui Tang"<<std::endl;
     std::cout << "========================================================================="<< std::endl;
-    std::cout << "Example:CVTermTest.exe -i initial.mhd -o originalImage.mhd -O output.mhd -P internalWeight, externalWeight, curvatureWeight, iterationTime, RSM, dimension"<< std::endl;
-    std::cout << desc1 << "\n";
+    std::cout << "Example:CVTermTest.exe  initial.mhd originalImage.mhd output.mhd internalWeight externalWeight curvatureWeight iterationTime RSM"<< std::endl;
 	return EXIT_FAILURE;
     }
-
-  std::vector<std::string> values(vm["parameters"].as<std::vector<std::string> >());
-  for(std::vector<std::string>::iterator iter = values.begin(); values.end() != iter; ++iter)
-    {
-    parameters.push_back(*iter);
-    std::string a = *iter;
-    std::istringstream b(a);
-    float f;
-    b >> f;
-    parametersF.push_back(f);
-    }
-  if( parameters.size() < 6 )
-    {
-    std::cout << "Error: not enough parameters provided, check help file" << std::endl;
-    return EXIT_FAILURE;
-    }
-
-
-  time_t rawtime;
-  struct tm * timeinfo;
-  time ( &rawtime );
-  timeinfo = localtime ( &rawtime );
-  std::cout<< "CVTermTest started at: "<<asctime (timeinfo)<< std::endl;
 
   // String for in- and ouput file
   std::string initialImageN;
@@ -142,9 +64,9 @@ int main( int argc, char* argv[] )
 
 
   // Get intensity file
-  if( vm.count( "initialImage" ) )
+  if( argv[1] )
     {
-    initialImageN = vm["initialImage"].as<std::string>();
+    initialImageN = argv[1];
     std::cout << "inputImage: " << initialImageN<< std::endl;
     }
   else
@@ -153,7 +75,7 @@ int main( int argc, char* argv[] )
     return EXIT_FAILURE;
     }
 
-  const unsigned int Dimension = 2;
+  const unsigned int Dimension = 3;
   typedef float                                    InputPixelType;
   typedef itk::Image< InputPixelType, Dimension >  InputImageType;
 
@@ -166,13 +88,13 @@ int main( int argc, char* argv[] )
   imgExt[0] = initial->GetBufferedRegion().GetSize()[0];
   imgExt[1] = initial->GetBufferedRegion().GetSize()[1];
   imgExt[2] = initial->GetBufferedRegion().GetSize()[2];
-  std::cout << "initial Image Extent " << imgExt[0] << ", " << imgExt[1] ;//<< ", " << imgExt[2] << std::endl;
+  std::cout << "initial Image Extent " << imgExt[0] << ", " << imgExt[1] << ", " << imgExt[2] << std::endl;
   // Get intensity file
 
   // Get intensity file
-  if (vm.count("originalImage"))
+  if (argv[2])
     {
-    originalImageN = vm["originalImage"].as<std::string>();
+    originalImageN = argv[2];
     std::cout << "originalImage: " << originalImageN<< std::endl;
     }
   else
@@ -190,16 +112,16 @@ int main( int argc, char* argv[] )
   imgExt2[0] = original->GetBufferedRegion().GetSize()[0];
   imgExt2[1] = original->GetBufferedRegion().GetSize()[1];
   imgExt2[2] = original->GetBufferedRegion().GetSize()[2];
-  std::cout << "original image Extent " << imgExt2[0] << ", " << imgExt2[1];// << ", " << imgExt2[2] << std::endl;
-  if (imgExt[0]!=imgExt2[0]||imgExt[1]!=imgExt2[1])//||imgExt[2]!=imgExt2[2])
+  std::cout << "original image Extent " << imgExt2[0] << ", " << imgExt2[1] << ", " << imgExt2[2] << std::endl;
+  if (imgExt[0]!=imgExt2[0]||imgExt[1]!=imgExt2[1]||imgExt[2]!=imgExt2[2])
     {
     std::cout << "image size should be the same!" << std::endl;
     return EXIT_FAILURE;
     }
 
-  if (vm.count("outputImage"))
+  if (argv[3])
     {
-    outputImageN = vm["outputImage"].as<std::string>();
+    outputImageN = argv[3];
     std::cout << "outputImage: " << outputImageN<< std::endl;
     }
   else
@@ -208,87 +130,84 @@ int main( int argc, char* argv[] )
     return EXIT_FAILURE;
     }
 
-typedef itk::WhitakerSparseLevelSetImage < InputPixelType, Dimension > SparseLevelSetType;
-  //typedef itk::LevelSetDenseImageBase< InputImageType > SparseLevelSetType;
+  typedef itk::WhitakerSparseLevelSetImage < InputPixelType, Dimension > SparseLevelSetType;
   typedef itk::BinaryImageToLevelSetImageAdaptor< InputImageType,
-      SparseLevelSetType> BinaryToSparseAdaptorType;
+	  SparseLevelSetType> BinaryToSparseAdaptorType;
 
   BinaryToSparseAdaptorType::Pointer adaptor = BinaryToSparseAdaptorType::New();
   adaptor->SetInputImage( initial );
   adaptor->Initialize();
 
-  // Here get the resulting level-set function
+  typedef  SparseLevelSetType::Pointer SparseLevelSetTypePointer;
+  SparseLevelSetTypePointer levelset = adaptor->GetLevelSet();
 
-  typedef SparseLevelSetType::Pointer SparseLevelSetTypePointer;
-  SparseLevelSetTypePointer level_set = adaptor->GetLevelSet();
-
-  // Create here the bounds in which this level-set can evolved.
-
-  // There is only one level-set, so we fill 1 list with only one element which
-  // correspondongs to the level-set identifier.
   typedef itk::IdentifierType         IdentifierType;
   typedef std::list< IdentifierType > IdListType;
 
-  IdListType list_ids;
-  list_ids.push_back( 1 );
+  IdListType listIds;
+  listIds.push_back( 1 );
 
-  // We create one image where for each pixel we provide which level-set exists.
-  // In this example the first level-set is defined on the whole image.
   typedef itk::Image< IdListType, Dimension >               IdListImageType;
-  IdListImageType::Pointer id_image = IdListImageType::New();
-  id_image->SetRegions( initial->GetLargestPossibleRegion() );
-  id_image->Allocate();
-  id_image->FillBuffer( list_ids );
+   IdListImageType::Pointer idimage = IdListImageType::New();
+  idimage->SetRegions( initial->GetLargestPossibleRegion() );
+  idimage->Allocate();
+  idimage->FillBuffer( listIds );
 
   typedef itk::Image< short, Dimension >                     CacheImageType;
   typedef itk::LevelSetDomainMapImageFilter< IdListImageType, CacheImageType >
-      DomainMapImageFilterType;
-  DomainMapImageFilterType::Pointer domainMapFilter = DomainMapImageFilterType::New();
-  domainMapFilter->SetInput( id_image );
+	  DomainMapImageFilterType;
+   DomainMapImageFilterType::Pointer domainMapFilter = DomainMapImageFilterType::New();
+  domainMapFilter->SetInput( idimage );
   domainMapFilter->Update();
 
   // Define the Heaviside function
-  typedef SparseLevelSetType::OutputRealType LevelSetOutputRealType;
+  typedef  SparseLevelSetType::OutputRealType LevelSetOutputRealType;
 
-  typedef itk::AtanRegularizedHeavisideStepFunction< LevelSetOutputRealType,
-  LevelSetOutputRealType > HeavisideFunctionBaseType;
-  HeavisideFunctionBaseType::Pointer heaviside = HeavisideFunctionBaseType::New();
+  typedef itk::AtanRegularizedHeavisideStepFunction< LevelSetOutputRealType,LevelSetOutputRealType > HeavisideFunctionType;
+   HeavisideFunctionType::Pointer heaviside = HeavisideFunctionType::New();
   heaviside->SetEpsilon( 1.5 );
 
   // Insert the levelsets in a levelset container
   typedef itk::LevelSetContainer< IdentifierType, SparseLevelSetType >
-    LevelSetContainerType;
-  typedef itk::LevelSetEquationTermContainerBase< InputImageType, LevelSetContainerType >
-    TermContainerType;
+	  LevelSetContainerType;
+  typedef itk::LevelSetEquationTermContainer< InputImageType, LevelSetContainerType >
+	  TermContainerType;
+   LevelSetContainerType::Pointer lsContainer = LevelSetContainerType::New();
+  lsContainer->SetHeaviside( heaviside );
+  lsContainer->SetDomainMapFilter( domainMapFilter );
 
-  LevelSetContainerType::Pointer lscontainer = LevelSetContainerType::New();
-  lscontainer->SetHeaviside( heaviside );
-  lscontainer->SetDomainMapFilter( domainMapFilter );
+  lsContainer->AddLevelSet( 0, levelset );
 
-  lscontainer->AddLevelSet( 0, level_set );
-
+  std::cout << std::endl;
   std::cout << "Level set container created" << std::endl;
 
-  typedef itk::LevelSetEquationChanAndVeseTerm< InputImageType,
-	  LevelSetContainerType > CVTermType;
 
-  CVTermType::Pointer cvTerm0 = CVTermType::New();
-  cvTerm0->SetInput( original  );
-  cvTerm0->SetInternalCoefficient( parametersF[0]  );
-  std::cout<<"InternalCoefficient:"<<parametersF[0]<<std::endl;
-  cvTerm0->SetExternalCoefficient(  parametersF[1] );
-  std::cout<<"ExternalCoefficient:"<<parametersF[1]<<std::endl;
-  cvTerm0->SetCurrentLevelSetId( 0 );
-  cvTerm0->SetLevelSetContainer( lscontainer );
+  typedef itk::LevelSetEquationChanAndVeseGlobalTerm< InputImageType,
+	  LevelSetContainerType > CVTermTypeIn;
+
+  CVTermTypeIn::Pointer cvTermIn0 = CVTermTypeIn::New();
+  cvTermIn0->SetInput( original  );
+  cvTermIn0->SetCoefficient( atof(argv[4])  );
+  std::cout<<"InternalCoefficient:"<<atof(argv[4])<<std::endl;
+  cvTermIn0->SetCurrentLevelSetId( 0 );
+  cvTermIn0->SetLevelSetContainer( lsContainer );
+
+  typedef itk::LevelSetEquationChanAndVeseExternalTerm< InputImageType,
+	  LevelSetContainerType > CVTermTypeEx;
+  CVTermTypeEx::Pointer cvTermEx0 = CVTermTypeEx::New();
+  cvTermEx0->SetCoefficient(  atof(argv[5]) );
+  std::cout<<"ExternalCoefficient:"<<atof(argv[5]) <<std::endl;
+  cvTermEx0->SetCurrentLevelSetId( 0 );
+  cvTermEx0->SetLevelSetContainer( lsContainer );
 
   typedef itk::LevelSetEquationCurvatureTerm< InputImageType,
       LevelSetContainerType > CurvatureTermType;
 
   CurvatureTermType::Pointer curvatureTerm0 =  CurvatureTermType::New();
-  curvatureTerm0->SetCoefficient( parametersF[2] );
-  std::cout<<"GeodesicCurvatureWeight:"<<parametersF[2]<<std::endl;
+  curvatureTerm0->SetCoefficient( atof(argv[6])  );
+  std::cout<<"CurvatureWeight:"<<atof(argv[6])<<std::endl;
   curvatureTerm0->SetCurrentLevelSetId( 0 );
-  curvatureTerm0->SetLevelSetContainer( lscontainer );
+  curvatureTerm0->SetLevelSetContainer( lsContainer );
 
 
 
@@ -304,35 +223,25 @@ typedef itk::WhitakerSparseLevelSetImage < InputPixelType, Dimension > SparseLev
 
   termContainer0->SetInput( original  );
   termContainer0->SetCurrentLevelSetId( 0 );
-  termContainer0->SetLevelSetContainer( lscontainer );
-  termContainer0->AddTerm( 0, cvTerm0  );
-  termContainer0->AddTerm( 1, curvatureTerm0 );
+  termContainer0->SetLevelSetContainer( lsContainer );
+  termContainer0->AddTerm( 0, cvTermIn0  );
+  termContainer0->AddTerm( 1, cvTermEx0  );
+  termContainer0->AddTerm( 2, curvatureTerm0 );
 
 
-  typedef itk::LevelSetEquationContainerBase< TermContainerType > EquationContainerType;
+  typedef itk::LevelSetEquationContainer< TermContainerType > EquationContainerType;
   EquationContainerType::Pointer equationContainer = EquationContainerType::New();
   equationContainer->AddEquation( 0, termContainer0 );
-  equationContainer->SetLevelSetContainer( lscontainer );
+  equationContainer->SetLevelSetContainer( lsContainer );
 
   typedef itk::LevelSetEvolutionNumberOfIterationsStoppingCriterion< LevelSetContainerType >
     StoppingCriterionType;
   StoppingCriterionType::Pointer criterion = StoppingCriterionType::New();
-  criterion->SetNumberOfIterations(  parametersF[3] );
-  std::cout<<"NumberOfIterations:"<<parametersF[3]<<endl;
+  criterion->SetNumberOfIterations(    atof(argv[7]) );
+  std::cout<<"NumberOfIterations:"<<atof(argv[7])<<std::endl;
 
-  if( criterion->GetNumberOfIterations() != parametersF[3] )
-    {
-    return EXIT_FAILURE;
-    }
-
-  criterion->SetRMSChangeAccumulator( parametersF[4]);
-  std::cout<<"RMSChangeAccumulator:"<<parametersF[4]<<endl;
-
-  if( criterion->GetRMSChangeAccumulator() != parametersF[4] )
-    {
-    return EXIT_FAILURE;
-    }
-
+  criterion->SetRMSChangeAccumulator( atof(argv[8]));
+  std::cout<<"RMSChangeAccumulator:"<<atof(argv[8])<<std::endl;
 
 
    typedef itk::LevelSetEvolution< EquationContainerType, SparseLevelSetType > LevelSetEvolutionType;
@@ -340,7 +249,7 @@ typedef itk::WhitakerSparseLevelSetImage < InputPixelType, Dimension > SparseLev
 
   evolution->SetEquationContainer( equationContainer );
   evolution->SetStoppingCriterion( criterion );
-  evolution->SetLevelSetContainer( lscontainer );
+  evolution->SetLevelSetContainer( lsContainer );
 
   try
     {
@@ -369,7 +278,7 @@ typedef itk::WhitakerSparseLevelSetImage < InputPixelType, Dimension > SparseLev
     {
     idx = oIt.GetIndex();
     //oIt.Set( level_set->GetLabelMap()->GetPixel(idx) );
-	oIt.Set( level_set->Evaluate(idx) );
+	oIt.Set( levelset->Evaluate(idx) );
     ++oIt;
     }
 
