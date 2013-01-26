@@ -39,7 +39,6 @@
 #include "itkLevelSetEquationChanAndVeseExternalTerm.h"
 #include <time.h>
 #include <math.h>
-#include "itkLevelSetEquationChanAndVeseGlobalTerm.h"
 
 
 int main( int argc, char* argv[] )
@@ -49,7 +48,7 @@ int main( int argc, char* argv[] )
   if (argc < 8)
     {
     std::cout << "========================================================================="<< std::endl;
-	std::cout << "Perform piecewise constant regional levelset segmentation" << std::endl ;
+	std::cout << "Perform piecewise constant regional levelset segmentation, i.e chan vese levelset method" << std::endl ;
     std::cout << "Algorithm by Chan and Vese"<<std::endl;
     std::cout << "Author: Hui Tang"<<std::endl;
     std::cout << "========================================================================="<< std::endl;
@@ -182,7 +181,7 @@ int main( int argc, char* argv[] )
   std::cout << "Level set container created" << std::endl;
 
 
-  typedef itk::LevelSetEquationChanAndVeseGlobalTerm< InputImageType,
+  typedef itk::LevelSetEquationChanAndVeseInternalTerm< InputImageType,
 	  LevelSetContainerType > CVTermTypeIn;
 
   CVTermTypeIn::Pointer cvTermIn0 = CVTermTypeIn::New();
